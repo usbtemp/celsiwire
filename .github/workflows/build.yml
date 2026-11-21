@@ -1,0 +1,68 @@
+name: Build and release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Check tag matches version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          version=$(sed -n 's/.*<Version>\(.*\)<\/Version>.*/\1/p' Celsiwire/Celsiwire.csproj)
+          manifest=$(sed -n 's/.*assemblyIdentity version="\([^"]*\)".*/\1/p' Celsiwire/app.manifest)
+          if [ -z "$version" ]; then
+            echo "::error::Could not find <Version> in Celsiwire/Celsiwire.csproj"
+            exit 1
+          fi
+          if [ "$TAG" != "v$version" ]; then
+            echo "::error::Tag $TAG does not match <Version> \"$version\" in Celsiwire/Celsiwire.csproj (expected tag v$version)"
+            exit 1
+          fi
+          if [ "$manifest" != "$version.0" ]; then
+            echo "::error::app.manifest version \"$manifest\" does not match <Version> \"$version\" (expected $version.0)"
+            exit 1
+          fi
+          echo "Tag $TAG matches version $version"
+
+      # The reference assemblies come from NuGet, so the .NET SDK builds both
+      # .NET Framework targets on Linux.
+      - name: Build Celsiwire.exe (.NET 4.0) and Celsiwire35.exe (.NET 3.5)
+        run: |
+          dotnet build Celsiwire.sln -c Release
+          mkdir -p dist
+          cp Celsiwire/bin/Release/net40/Celsiwire.exe dist/Celsiwire.exe
+          cp Celsiwire/bin/Release/net35/Celsiwire35.exe dist/Celsiwire35.exe
+
+      - name: Show binaries and write checksums
+        working-directory: dist
+        run: |
+          file *
+          sha256sum * > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.event.repository.name }} ${{ github.ref_name }}
+          files: dist/*
+          generate_release_notes: true
+          body: |
+            _for MS Windows Vista or newer_
+            - `Celsiwire.exe`: PE32 executable (GUI) Intel 80386, .NET Framework 4.0 or newer
+            - `Celsiwire35.exe`: PE32 executable (GUI) Intel 80386, .NET Framework 3.5
+
+            Verify downloads with `sha256sum -c SHA256SUMS --ignore-missing`.

@@ -1,0 +1,29 @@
+root = true
+
+[*]
+end_of_line = crlf
+insert_final_newline = true
+
+# Code analysis tuning for Celsiwire.
+# The project enables the .NET analyzers at the "Recommended" level (see Celsiwire/Celsiwire.csproj).
+# Rules below are turned down because they target reusable libraries or don't fit this app.
+
+[*.cs]
+
+# Culture in string.Format: UI and status texts intentionally use the user's culture;
+# file formats (XML, CSV time stamps) already format invariantly where it matters.
+dotnet_diagnostic.CA1305.severity = none
+
+# Library design guidelines that don't apply to a small desktop app.
+dotnet_diagnostic.CA1852.severity = none   # seal internal types
+dotnet_diagnostic.CA1051.severity = none   # no visible instance fields
+dotnet_diagnostic.CA2211.severity = none   # no visible non-constant static fields
+dotnet_diagnostic.CA1036.severity = none   # comparison operators for IComparable (Port)
+
+# Naming kept from the original 1-Wire library code (owReset, owWrite, wb, ...).
+dotnet_diagnostic.CA1707.severity = none   # underscores in identifiers
+dotnet_diagnostic.CA1716.severity = none   # type name "Event" is a keyword in VB
+dotnet_diagnostic.CA1725.severity = none   # parameter names differ from base declaration
+
+# Ports and workers live for the whole application run; no practical leak.
+dotnet_diagnostic.CA1001.severity = suggestion
