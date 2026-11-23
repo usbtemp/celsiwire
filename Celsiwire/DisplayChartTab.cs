@@ -9,6 +9,8 @@ namespace Display
     {
         private readonly FlowLayoutPanel buttons;
         private readonly Chart chart;
+        private readonly ToggleButton autoButton;
+        private readonly ToolTip toolTip = new ToolTip();
         private readonly Timer slideTimer;
         private readonly Font buttonFont;
 
@@ -31,12 +33,22 @@ namespace Display
         {
             foreach (Control control in buttons.Controls)
             {
-                if (control is ToggleButton button)
+                if (control is ToggleButton button && button != autoButton)
                 {
                     button.Selected = button == sender;
                 }
             }
             chart.Series = (Controller.ChartSeries)((Control)sender).Tag;
+        }
+
+        private void OnAutoButton(object sender, EventArgs e)
+        {
+            chart.ResetRange();
+        }
+
+        private void OnAutoRangeChanged(object sender, EventArgs e)
+        {
+            autoButton.Selected = chart.AutoRange;
         }
 
         private void OnSlideTimer(object sender, EventArgs e)
@@ -64,6 +76,21 @@ namespace Display
             buttonFont = new Font(Font.FontFamily, Font.Size * 0.95f, Font.Style);
             buttons = new FlowLayoutPanel() { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false, Margin = Padding.Empty };
             chart = new Chart() { Series = Controller.ChartHistory.Day };
+            chart.AutoRangeChanged += new EventHandler(OnAutoRangeChanged);
+
+            /* Highlighted while the temperature axis fits the data; after the mouse wheel has zoomed it, a click fits it again. */
+            autoButton = new ToggleButton()
+            {
+                Text = "Fit",
+                Font = buttonFont,
+                Margin = Padding.Empty,
+                Selected = chart.AutoRange,
+            };
+            autoButton.FitText();
+            autoButton.Click += new EventHandler(OnAutoButton);
+            buttons.Controls.Add(autoButton);
+            toolTip.SetToolTip(autoButton, "Fit the temperature axis to the data. The mouse wheel over the chart zooms it.");
+
             AddViewButton("Day", Controller.ChartHistory.Day, true);
             AddViewButton("Week", Controller.ChartHistory.Week, false);
             AddViewButton("Month", Controller.ChartHistory.Month, false);
@@ -85,6 +112,7 @@ namespace Display
             if (disposing)
             {
                 slideTimer.Dispose();
+                toolTip.Dispose();
                 buttonFont.Dispose();
             }
             base.Dispose(disposing);

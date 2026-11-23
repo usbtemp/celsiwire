@@ -38,8 +38,18 @@ namespace Display.Controls
             TimeSpan.FromDays(1), TimeSpan.FromDays(2), TimeSpan.FromDays(5), TimeSpan.FromDays(7),
         };
         private static readonly float[] NiceFactors = { 1f, 2f, 2.5f, 5f, 10f };
+        /* Narrowest temperature range the mouse wheel can set, and the limits it stays within, in °C. */
+        private const float MIN_RANGE = 0.5f;
+        private const float LOWEST = -55f;
+        private const float HIGHEST = 130f;
+        private const float MAX_RANGE = HIGHEST - LOWEST;
+        /* Each wheel notch narrows (up) or widens (down) the temperature range by this factor. */
+        private const double WHEEL_ZOOM = 0.8;
 
         private Controller.ChartSeries series;
+        /* Temperature range set with the mouse wheel; without it the range fits the data. */
+        private float? manualMin;
+        private float? manualMax;
         private readonly ToolTip hoverTip = new ToolTip();
         private string hoverText;
         private ChartLayout hoverLayout;
@@ -57,6 +67,29 @@ namespace Display.Controls
                 series = value;
                 Invalidate();
             }
+        }
+
+        /* Raised when the temperature range switches between fitting the data and a range set with the mouse wheel. */
+        public event EventHandler AutoRangeChanged;
+
+        /* True while the temperature range fits the data, false after the mouse wheel has set it. */
+        public bool AutoRange
+        {
+            get { return !manualMin.HasValue; }
+        }
+
+        /* Lets the temperature range fit the data again. */
+        public void ResetRange()
+        {
+            if (AutoRange)
+            {
+                return;
+            }
+            manualMin = null;
+            manualMax = null;
+            HideHover();
+            Invalidate();
+            AutoRangeChanged?.Invoke(this, EventArgs.Empty);
         }
 
         private class ChartLayout
@@ -112,6 +145,26 @@ namespace Display.Controls
         {
             int index = devices.IndexOf(device);
             return Palette[(index < 0 ? 0 : index) % Palette.Length];
+        }
+
+        /* Sensors in color and legend order: the enabled sensors in configuration order (the CSV column order),
+           so a sensor keeps its color after a restart even when another one is not read at first.
+           Sensors measured in this run but disabled since follow, in the order they were first measured. */
+        private static List<owDevice.owDevice> ColorOrder()
+        {
+            List<owDevice.owDevice> devices = new List<owDevice.owDevice>();
+            foreach (Configuration.Device sensor in Configuration.Communication.GetDeviceList(typeof(owDevice.DS18B20), true))
+            {
+                devices.Add(sensor.device);
+            }
+            foreach (owDevice.owDevice device in Controller.ChartHistory.Devices())
+            {
+                if (!devices.Contains(device))
+                {
+                    devices.Add(device);
+                }
+            }
+            return devices;
         }
 
         private static int Alpha(ChartLayout layout, DateTime time)
@@ -194,7 +247,7 @@ namespace Display.Controls
             }
 
             List<Data.ChartSample> samples = series.Snapshot();
-            List<owDevice.owDevice> devices = Controller.ChartHistory.Devices();
+            List<owDevice.owDevice> devices = ColorOrder();
             ChartLayout layout = new ChartLayout() { Now = now, Span = series.Span, Start = now - TimeSpan.FromTicks(series.Span.Ticks / 2) };
             DateTime oldest = now - series.Span;
 
@@ -286,21 +339,40 @@ namespace Display.Controls
             {
                 return;
             }
-            float step = NiceStep(max - min, (bottom - top) / (2 * lineHeight));
-            layout.Min = (float)Math.Floor(min / step) * step;
-            layout.Max = (float)Math.Ceiling(max / step) * step;
-            if (layout.Max <= layout.Min)
+            int maxYTicks = (bottom - top) / (2 * lineHeight);
+            float step;
+            if (manualMin.HasValue)
             {
-                layout.Max = layout.Min + step;
+                /* The range set with the mouse wheel is kept exactly; the grid lines fall on round values inside it. */
+                layout.Min = manualMin.Value;
+                layout.Max = manualMax.Value;
+                step = NiceStep(layout.Max - layout.Min, maxYTicks);
+            }
+            else
+            {
+                step = NiceStep(max - min, maxYTicks);
+                layout.Min = (float)Math.Floor(min / step) * step;
+                layout.Max = (float)Math.Ceiling(max / step) * step;
+                if (layout.Max <= layout.Min)
+                {
+                    layout.Max = layout.Min + step;
+                }
             }
 
             NumberFormatInfo numberFormat = Utils.Formats.ValueFormat();
+            List<float> yValues = new List<float>();
             List<string> yLabels = new List<string>();
             int yLabelWidth = TextRenderer.MeasureText(g, "°C", Font).Width;
-            int yTicks = (int)Math.Round((layout.Max - layout.Min) / step);
-            for (int i = 0; i <= yTicks; i++)
+            double firstTick = Math.Ceiling(layout.Min / step - 0.001);
+            for (int i = 0; ; i++)
             {
-                string label = (layout.Min + i * step).ToString("0.##", numberFormat);
+                float value = (float)((firstTick + i) * step);
+                if (value > layout.Max + step * 0.001f)
+                {
+                    break;
+                }
+                string label = value.ToString("0.##", numberFormat);
+                yValues.Add(value);
                 yLabels.Add(label);
                 yLabelWidth = Math.Max(yLabelWidth, TextRenderer.MeasureText(g, label, Font).Width);
             }
@@ -317,10 +389,10 @@ namespace Display.Controls
             using (Pen axis = new Pen(AxisColor))
             {
                 /* Temperature grid and labels. */
-                for (int i = 0; i <= yTicks; i++)
+                for (int i = 0; i < yValues.Count; i++)
                 {
-                    int y = (int)Math.Round(layout.Y(layout.Min + i * step));
-                    if (i > 0 && i < yTicks)
+                    int y = (int)Math.Round(layout.Y(yValues[i]));
+                    if (y > plot.Top && y < plot.Bottom)
                     {
                         g.DrawLine(grid, plot.Left, y, plot.Right, y);
                     }
@@ -499,6 +571,60 @@ namespace Display.Controls
         {
             base.OnMouseLeave(e);
             HideHover();
+        }
+
+        /* Windows sends the mouse wheel to the focused control, so the chart takes the focus when the mouse is over it. */
+        protected override void OnMouseEnter(EventArgs e)
+        {
+            base.OnMouseEnter(e);
+            if (!Focused && Form.ActiveForm != null && Form.ActiveForm == FindForm())
+            {
+                Focus();
+            }
+        }
+
+        protected override void OnMouseDown(MouseEventArgs e)
+        {
+            base.OnMouseDown(e);
+            Focus();
+        }
+
+        /* The wheel narrows (up) or widens (down) the temperature range, keeping the value under the mouse in place. */
+        protected override void OnMouseWheel(MouseEventArgs e)
+        {
+            base.OnMouseWheel(e);
+            if (e is HandledMouseEventArgs handled)
+            {
+                handled.Handled = true;
+            }
+            ChartLayout layout = hoverLayout;
+            if (layout == null || e.Delta == 0)
+            {
+                return;
+            }
+            Rectangle plot = layout.Plot;
+            float range = layout.Max - layout.Min;
+            float newRange = (float)(range * Math.Pow(WHEEL_ZOOM, e.Delta / 120.0));
+            newRange = Math.Max(MIN_RANGE, Math.Min(MAX_RANGE, newRange));
+            if (newRange == range && !AutoRange)
+            {
+                return;
+            }
+            int y = Math.Max(plot.Top, Math.Min(plot.Bottom, e.Y));
+            float below = (plot.Bottom - y) / (float)plot.Height;
+            float anchor = layout.Min + below * range;
+            bool wasAuto = AutoRange;
+            /* Slid back inside LOWEST..HIGHEST when it would cross one of them. */
+            float newMin = anchor - below * newRange;
+            newMin = Math.Max(LOWEST, Math.Min(HIGHEST - newRange, newMin));
+            manualMin = newMin;
+            manualMax = newMin + newRange;
+            HideHover();
+            Invalidate();
+            if (wasAuto)
+            {
+                AutoRangeChanged?.Invoke(this, EventArgs.Empty);
+            }
         }
 
         private void HideHover()

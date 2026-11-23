@@ -62,7 +62,7 @@ jobs:
           generate_release_notes: true
           body: |
             _for MS Windows Vista or newer_
-            - `Celsiwire.exe`: PE32 executable (GUI) Intel 80386, .NET Framework 4.0 or newer
-            - `Celsiwire35.exe`: PE32 executable (GUI) Intel 80386, .NET Framework 3.5
+            - `Celsiwire.exe`: PE32 executable (GUI), Intel i386 Mono/.Net assembly, 3 sections; .NET Framework 4.0 or newer
+            - `Celsiwire35.exe`: PE32 executable (GUI), Intel i386 Mono/.Net assembly, 3 sections; .NET Framework 3.5
 
             Verify downloads with `sha256sum -c SHA256SUMS --ignore-missing`.

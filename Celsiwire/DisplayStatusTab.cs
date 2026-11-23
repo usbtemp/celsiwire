@@ -28,36 +28,67 @@ namespace Display
             }
         }
 
+        private static int ColumnsForWidth(int width)
+        {
+            int columns = (width - margin) / (Consts.Display.PANEL_MIN_WIDTH + margin);
+            return columns == 0 ? 1 : columns;
+        }
+
+        private static int RowsForColumns(int count, int columns)
+        {
+            return (count + columns - 1) / columns;
+        }
+
+        /* A tile grows itself when its labels need more than PanelHeight; rows are spaced by the tallest tile. */
+        private int TileHeight()
+        {
+            int height = PanelHeight;
+            foreach (StatusTabPanel panel in panels.Values)
+            {
+                if (panel.Height > height)
+                {
+                    height = panel.Height;
+                }
+            }
+            return height;
+        }
+
+        /* When the rows do not fit, the scroll bar takes its width from the tiles; ClientSize already excludes it once it is shown. */
         private void InitPositions()
         {
-            int w = ClientSize.Width - margin;
-
-            panelColumns = w / (Consts.Display.PANEL_MIN_WIDTH + margin);
-            if (panelColumns == 0)
+            int w = ClientSize.Width;
+            int rows = RowsForColumns(panels.Count, ColumnsForWidth(w));
+            if (!VerticalScroll.Visible && margin + rows * (TileHeight() + margin) > ClientSize.Height)
             {
-                panelColumns = 1;
+                w -= SystemInformation.VerticalScrollBarWidth;
             }
 
-            panelSize = new Size(w / panelColumns - margin, PanelHeight);
+            panelColumns = ColumnsForWidth(w);
+            panelSize = new Size((w - margin) / panelColumns - margin, PanelHeight);
         }
 
-        private void PositionPanel(Panel panel, int row, int i)
+        /* Locations are relative to the scrolled view, so the scroll offset is added. */
+        private void PositionPanel(Panel panel, int row, int i, int rowHeight)
         {
-            int rowHeight = PanelHeight + margin;
-
-            panel.Size = panelSize;
-            panel.Location = new Point(margin + i * (panelSize.Width + margin), margin + row * rowHeight);
+            Point scroll = AutoScrollPosition;
+            panel.Location = new Point(margin + i * (panelSize.Width + margin) + scroll.X, margin + row * rowHeight + scroll.Y);
         }
 
+        /* Sizes are set first, so a tile that grows to fit its labels is known before the rows are spaced. */
         protected override void ResizeComponents()
         {
             InitPositions();
+            foreach (StatusTabPanel panel in panels.Values)
+            {
+                panel.Size = panelSize;
+            }
+
+            int rowHeight = TileHeight() + margin;
             int i = 0;
             int row = 0;
-            foreach (KeyValuePair<owDevice.owDevice, StatusTabPanel> entry in panels)
+            foreach (StatusTabPanel panel in panels.Values)
             {
-                StatusTabPanel panel = entry.Value;
-                PositionPanel(panel, row, i++);
+                PositionPanel(panel, row, i++, rowHeight);
                 if (i >= panelColumns)
                 {
                     i = 0; row++;
@@ -201,6 +232,8 @@ namespace Display
             menu.Items.Add(new ToolStripMenuItem("Copy all sensors", null, new EventHandler(OnCopyAll)));
             menu.Opening += new System.ComponentModel.CancelEventHandler(OnMenuOpening);
             ContextMenuStrip = menu;
+            AutoScroll = true;
+            AutoScrollMargin = new Size(0, margin);
 
             AttachViewEvents();
         }

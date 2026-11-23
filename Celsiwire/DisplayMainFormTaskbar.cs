@@ -16,6 +16,8 @@ namespace Display
         private static readonly int TaskbarButtonCreatedMessage = Utils.WindowMessages.Register("TaskbarButtonCreated");
         private ITaskbarList3 taskbar;
         private bool taskbarFailed;
+        /* Set when Explorer reports the taskbar button; before that SetOverlayIcon can fail with "access denied". */
+        private bool taskbarButtonReady;
         private int taskbarBadge = -1;
         private Icon loggingBadgeIcon;
         private Icon alarmBadgeIcon;
@@ -43,7 +45,7 @@ namespace Display
                 taskbar = list;
                 return true;
             }
-            catch (Exception e) when (e is COMException || e is InvalidCastException)
+            catch (Exception e) when (e is COMException || e is InvalidCastException || e is UnauthorizedAccessException)
             {
                 taskbarFailed = true;
                 Utils.Log.Warn("Taskbar badge not available: {0}", e.Message);
@@ -54,13 +56,24 @@ namespace Display
         /* Explorer sends TaskbarButtonCreated when the button exists (again after restoring from the tray); the badge is set again then. */
         private void OnTaskbarButtonCreated()
         {
+            taskbarButtonReady = true;
             taskbarBadge = -1;
             UpdateTaskbarBadge();
         }
 
+        /* Hiding the window (to the tray) removes its taskbar button; Explorer reports the new one when it is shown again. */
+        protected override void OnVisibleChanged(EventArgs e)
+        {
+            base.OnVisibleChanged(e);
+            if (!Visible)
+            {
+                taskbarButtonReady = false;
+            }
+        }
+
         private void UpdateTaskbarBadge()
         {
-            if (!IsHandleCreated || !Visible || !EnsureTaskbar())
+            if (!IsHandleCreated || !Visible || !taskbarButtonReady || !EnsureTaskbar())
             {
                 return;
             }
@@ -85,8 +98,11 @@ namespace Display
                 }
                 taskbarBadge = badge;
             }
-            catch (COMException e)
+            catch (Exception e) when (e is COMException || e is UnauthorizedAccessException)
             {
+                /* E_ACCESSDENIED arrives as UnauthorizedAccessException. Not retried until the badge changes
+                   or Explorer reports the button again, so the log gets one line instead of one per measurement. */
+                taskbarBadge = badge;
                 Utils.Log.Warn("Taskbar badge could not be set: {0}", e.Message);
             }
         }

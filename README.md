@@ -13,7 +13,7 @@ Sponsored by [usbtemp.com](https://usbtemp.com)
 - Measurement interval from 1 second to 10 minutes (default 5 seconds), plus custom values.
 - CSV files with one column per sensor. A new file is started after a set number of records or every day.
 - Status tab showing each sensor's value with its min, average and max since logging started.
-- Chart tab with the temperatures of the last day, week or month, one colour per sensor.
+- Chart tab with the temperatures of the last day, week or month, one colour per sensor. Colours follow the sensor order of the configuration, so they stay the same after a restart.
 - Low and high alarm limits per sensor, with hysteresis, an optional sound and a tray notification.
 - Alarm when a sensor has not been read for 1 minute during logging.
 - A USB adapter that is unplugged during logging is picked up again when it comes back, even on a different COM port. The same applies to an adapter that is missing when logging starts: its sensors keep their columns in the file and are read as soon as it is plugged in.
@@ -57,7 +57,8 @@ Sponsored by [usbtemp.com](https://usbtemp.com)
    While logging, a blinking green dot next to the tabs and a green dot on the taskbar icon show that it is running.
    Press *Stop* (F8) to end logging.
 6. **Watch the chart.** The **Chart** tab draws the temperatures. The buttons *Day*, *Week* and *Month* in its top right corner
-   choose how much it shows. The current time is the green dashed line in the middle, with the date above it and the time below it;
+   choose how much it shows. The mouse wheel over the chart zooms the temperature axis around the pointer, within -55 to 130 °C;
+   *Fit*, left of *Day*, fits the axis to the data again. The current time is the green dashed line in the middle, with the date above it and the time below it;
    the newest data is on its left and slides left as time passes. The right half shows the older data from before that, fading with age.
    Point at the chart to see the time and each sensor's value there. Alarm limits are drawn as dashed lines in the sensor's colour;
    *Show alarm limits on the chart* on the **Settings** tab turns them off.

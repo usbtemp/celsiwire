@@ -486,7 +486,9 @@ namespace Display
             Font = Helper.UiFont;
             Icon = Helper.AppIcon;
             float scale = Helper.DpiScale;
-            Size = MinimumSize = new Size((int)(700 * scale), (int)(400 * scale));
+            /* At 100% the window is tall enough for two rows of status tiles. */
+            int height = scale < 1.25f ? 412 : (int)(400 * scale);
+            Size = MinimumSize = new Size((int)(700 * scale), height);
             Text = Consts.App.NAME;
             CenterToScreen();
 

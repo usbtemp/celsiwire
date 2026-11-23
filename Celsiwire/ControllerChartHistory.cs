@@ -35,7 +35,7 @@ namespace Controller
             }
         }
 
-        /* Sensors in the order they were first measured, so each keeps its color. */
+        /* Sensors in the order they were first measured in this run. */
         public static List<owDevice.owDevice> Devices()
         {
             lock (devices)
